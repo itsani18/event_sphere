@@ -2,21 +2,20 @@ import { useEffect, useState } from "react";
 import { getEvents, getEventById, registerEvent } from "../services/api";
 import AuthModal from "../components/AuthModal";
 
-const EVENTS_PER_PAGE = 6;
-
 export default function EventsPage({ role }) {
   const [events, setEvents] = useState([]);
   const [selected, setSelected] = useState(null);
   const [token, setToken] = useState(localStorage.getItem("token"));
   const [showAuth, setShowAuth] = useState(false);
   const [showForm, setShowForm] = useState(false);
-
+  const [selectedMonth, setSelectedMonth] = useState("");
   const username = localStorage.getItem("username");
   const userRole = localStorage.getItem("role");
 
   const [form, setForm] = useState({ name: "", email: "" });
 
   const [showCreate, setShowCreate] = useState(false);
+  const [editingId, setEditingId] = useState(null);
   const [newEvent, setNewEvent] = useState({
     title: "",
     description: "",
@@ -27,10 +26,21 @@ export default function EventsPage({ role }) {
 
   // ================= PAGINATION =================
   const [currentPage, setCurrentPage] = useState(1);
-  const totalPages = Math.ceil(events.length / EVENTS_PER_PAGE);
-  const paginatedEvents = events.slice(
-    (currentPage - 1) * EVENTS_PER_PAGE,
-    currentPage * EVENTS_PER_PAGE
+  const [eventsPerPage, setEventsPerPage] = useState(6);
+  // ================= FILTER =================
+  const filteredEvents = events.filter((e) => {
+    if (!selectedMonth) return true;
+
+    const eventDate = new Date(e.date);
+    return eventDate.getMonth() === Number(selectedMonth);
+  });
+
+  // ================= PAGINATION =================
+  const totalPages = Math.ceil(filteredEvents.length / eventsPerPage);
+
+  const paginatedEvents = filteredEvents.slice(
+    (currentPage - 1) * eventsPerPage,
+    currentPage * eventsPerPage
   );
 
   // ================= FETCH EVENTS =================
@@ -85,24 +95,40 @@ export default function EventsPage({ role }) {
   };
 
   // ================= CREATE =================
-  const handleCreateEvent = async () => {
-    try {
-      await fetch("http://localhost:8080/events", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(newEvent),
-      });
-      alert("Event Created!");
-      setShowCreate(false);
-      setNewEvent({ title: "", description: "", date: "", type: "", seatsLeft: "" });
-      fetchEvents();
-    } catch (err) {
-      alert(err.message);
-    }
-  };
+const handleCreateEvent = async () => {
+  try {
+    const url = editingId
+      ? `http://localhost:8080/events/${editingId}`
+      : `http://localhost:8080/events`;
+
+    const method = editingId ? "PUT" : "POST";
+
+    await fetch(url, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(newEvent),
+    });
+
+    alert(editingId ? "Event Updated!" : "Event Created!");
+
+    setShowCreate(false);
+    setEditingId(null); // 🔥 reset after update
+    setNewEvent({
+      title: "",
+      description: "",
+      date: "",
+      type: "",
+      seatsLeft: "",
+    });
+
+    fetchEvents();
+  } catch (err) {
+    alert(err.message);
+  }
+};
 
   // ================= DELETE =================
   const handleDelete = async (id) => {
@@ -119,16 +145,21 @@ export default function EventsPage({ role }) {
   };
 
   // ================= EDIT =================
-  const handleEdit = (event) => {
-    setNewEvent({
-      title: event.title || "",
-      description: event.description || "",
-      date: event.date ? event.date.slice(0, 16) : "",
-      type: event.type || "",
-      seatsLeft: event.seatsLeft || "",
-    });
-    setShowCreate(true);
-  };
+    const handleEdit = (event) => {
+      const id = event.id || event._id;
+
+      setEditingId(id); // 🔥 VERY IMPORTANT
+
+      setNewEvent({
+        title: event.title || "",
+        description: event.description || "",
+        date: event.date ? event.date.slice(0, 16) : "",
+        type: event.type || "",
+        seatsLeft: event.seatsLeft || "",
+      });
+
+      setShowCreate(true);
+    };
 
   return (
     <div className="events-page">
@@ -170,8 +201,7 @@ export default function EventsPage({ role }) {
         {/* ---- CREATE FORM PANEL ---- */}
         {showCreate && (
           <div className="create-panel">
-            <h3>✦ {newEvent.title ? "Edit Event" : "Create New Event"}</h3>
-
+            <h3>✦ {editingId ? "Edit Event" : "Create New Event"}</h3>
             <div className="input-group">
               <label className="input-label">Title</label>
               <input
@@ -235,14 +265,54 @@ export default function EventsPage({ role }) {
           <>
             <div className="section-header">
               <h2 className="section-title">Upcoming <span>Events</span></h2>
-              {totalPages > 1 && (
-                <span className="pagination-info">
-                  Page {currentPage} of {totalPages}
-                </span>
-              )}
+              <div className="pagination-controls">
+                {totalPages > 1 && (
+                  <span className="pagination-info">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                )}
+                <div className="per-page-selector">
+                  <label className="per-page-label">Show</label>
+                  <select
+                    className="per-page-select"
+                    value={eventsPerPage}
+                    onChange={(e) => {
+                      setEventsPerPage(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                  >
+                    <option value={3}>3</option>
+                    <option value={6}>6</option>
+                    <option value={9}>9</option>
+                    <option value={12}>12</option>
+                    <option value={24}>24</option>
+                  </select>
+                  <label className="per-page-label">per page</label>
+                </div>
+                <div style={{ marginBottom: "20px" }}>
+                  <select
+                    value={selectedMonth}
+                    onChange={(e) => setSelectedMonth(e.target.value)}
+                  >
+                    <option value="">All Months</option>
+                    <option value="0">January</option>
+                    <option value="1">February</option>
+                    <option value="2">March</option>
+                    <option value="3">April</option>
+                    <option value="4">May</option>
+                    <option value="5">June</option>
+                    <option value="6">July</option>
+                    <option value="7">August</option>
+                    <option value="8">September</option>
+                    <option value="9">October</option>
+                    <option value="10">November</option>
+                    <option value="11">December</option>
+                  </select>
+                </div>
+              </div>
             </div>
 
-            {events.length === 0 ? (
+            {filteredEvents.length === 0 ? (
               <div className="empty-state">
                 <div className="empty-state-icon">📭</div>
                 <h3>No events yet</h3>
