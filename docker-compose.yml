@@ -1,0 +1,63 @@
+services:
+
+  mysql:
+    image: mysql:8
+    container_name: event_management_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: event_management_event_db
+    ports:
+      - "3310:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  event-service:
+    image: eclipse-temurin:21-jdk
+    container_name: event_management_event-service
+    volumes:
+      - ./event_management/backend/event-service/target:/app
+    working_dir: /app
+    command: sh -c "sleep 20 && java -jar *.jar"
+    ports:
+      - "8085:8081"
+    depends_on:
+      - mysql
+
+  auth-service:
+    image: eclipse-temurin:21-jdk
+    container_name: event_management_auth-service
+    volumes:
+      - ./event_management/backend/auth-service/target:/app
+    working_dir: /app
+    command: sh -c "sleep 20 && java -jar *.jar"
+    ports:
+      - "8086:8082"
+    depends_on:
+      - mysql
+
+  api-gateway:
+    image: eclipse-temurin:21-jdk
+    container_name: event_management_api-gateway
+    volumes:
+      - ./event_management/backend/api-gateway/target:/app
+    working_dir: /app
+    command: sh -c "sleep 20 && java -jar *.jar"
+    ports:
+      - "8080:8080"
+    depends_on:
+      - event-service
+      - auth-service
+
+  frontend:
+    image: node:20
+    container_name: event_management_frontend
+    working_dir: /app
+    volumes:
+      - ./event_management/frontend:/app
+    command: sh -c "npm install && npm run dev -- --host"
+    ports:
+      - "5174:5173"
+
+volumes:
+  mysql-data:
